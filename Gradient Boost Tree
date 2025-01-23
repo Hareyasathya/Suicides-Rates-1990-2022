@@ -1,0 +1,75 @@
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.types import IntegerType
+from pyspark.ml.feature import VectorAssembler, Imputer
+from pyspark.ml.classification import GBTClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+# Membuat SparkSession
+spark = SparkSession.builder.appName("SuicideAnalysis").getOrCreate()
+
+# Mengonversi DataFrame Pandas ke DataFrame Spark
+spark_df = spark.createDataFrame(dataset)
+
+# Mendefinisikan Fungsi untuk Membuat Kolom Label 'TingkatKematianPer100K'
+def create_binary_label(TingkatKematianPer100K):
+    if TingkatKematianPer100K <= 10:
+        return 0  # tingkat bunuh diri rendah
+    else:
+        return 1  # tingkat bunuh diri sedang hingga tinggi
+
+create_binary_label_udf = F.udf(create_binary_label, returnType=IntegerType())
+spark_df = spark_df.withColumn("label", create_binary_label_udf(spark_df["TingkatKematianPer100K"]))
+
+# Mendefinisikan Kolom Fitur
+feature_columns = ['Populasi', 'PDBPerKepala', 'TingkatKematianPer100K', 'RasioPenyerapanTenagaKerja']
+
+# Membuat Imputer untuk Menangani Nilai NaN
+imputer = Imputer(inputCols=feature_columns, outputCols=feature_columns)
+imputer_model = imputer.fit(spark_df)
+spark_df = imputer_model.transform(spark_df)
+
+# Membuat VectorAssembler
+assembler = VectorAssembler(inputCols=feature_columns, outputCol="features")
+
+# Aplikasikan VectorAssembler ke Data
+spark_df = assembler.transform(spark_df)
+
+# Membagi Data ke dalam Set Latih dan Uji
+train_data, test_data = spark_df.randomSplit([0.8, 0.2], seed=1234)
+
+# Mendefinisikan dan Melatih Gradient Boosted Tree Classifier (GBT)
+gbt = GBTClassifier(labelCol="label", featuresCol="features", maxIter=100)
+gbt_model = gbt.fit(train_data)
+
+# Buat prediksi menggunakan model
+predictions = gbt_model.transform(test_data)
+
+# Evaluasi akurasi
+evaluator = BinaryClassificationEvaluator(labelCol="label", rawPredictionCol="rawPrediction", metricName="areaUnderROC")
+accuracy = evaluator.evaluate(predictions)
+
+print(f"Gradient Boost Tree Accuracy: {accuracy}")
+
+# Evaluator untuk masing-masing metrik
+evaluator_auc = BinaryClassificationEvaluator(labelCol="label", rawPredictionCol="rawPrediction", metricName="areaUnderROC")  # AUC (ROC Curve)
+evaluator_accuracy = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="accuracy")
+evaluator_f1 = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="f1")
+evaluator_precision = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="weightedPrecision")
+evaluator_recall = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="weightedRecall")
+
+# Menghitung masing-masing metrik
+auc = evaluator_auc.evaluate(predictions)
+accuracy = evaluator_accuracy.evaluate(predictions)
+f1_score = evaluator_f1.evaluate(predictions)
+precision = evaluator_precision.evaluate(predictions)
+recall = evaluator_recall.evaluate(predictions)
+
+# Menampilkan hasil evaluasi
+print(f"Hasil Evaluasi Model:")
+print(f"1. AUC (ROC Curve): {auc}")
+print(f"2. Accuracy: {accuracy}")
+print(f"3. F1 Score: {f1_score}")
+print(f"4. Precision: {precision}")
+print(f"5. Recall: {recall}")
