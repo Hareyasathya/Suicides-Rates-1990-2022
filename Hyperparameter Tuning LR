@@ -1,0 +1,33 @@
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+# Definisi Model Logistic Regression
+lr = LogisticRegression(featuresCol="features", labelCol="label")
+
+# Grid Hyperparameter untuk Logistic Regression
+paramGrid_lr = ParamGridBuilder() \
+    .addGrid(lr.regParam, [0.01, 0.1, 0.5]) \
+    .addGrid(lr.elasticNetParam, [0.0, 0.5, 1.0]) \
+    .addGrid(lr.maxIter, [10, 50, 100]) \
+    .build()
+
+# Mendefinisikan Evaluator
+evaluator_lr = BinaryClassificationEvaluator(labelCol="label", metricName="areaUnderROC")
+
+# Cross-validation untuk Hyperparameter Tuning
+cv_lr = CrossValidator(
+    estimator=lr,
+    estimatorParamMaps=paramGrid_lr,
+    evaluator=evaluator_lr,
+    numFolds=5  # K-fold cross-validation
+)
+
+# Model Latih Dengan Hyperparameter Tuning
+cv_model_lr = cv_lr.fit(train_data)
+
+# Pelatihan dan Evaluasi Model Logistic Regression
+best_lr_model = cv_model_lr.bestModel
+auc_lr = evaluator_lr.evaluate(best_lr_model.transform(test_data))
+
+print(f"Best Logistic Regression AUC: {auc_lr}")
