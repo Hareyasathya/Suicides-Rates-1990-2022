@@ -1,0 +1,55 @@
+# Memeriksa tipe data pada setiap kolom
+print(dataset.dtypes)
+
+# Mengganti nama kolom (Contoh: mengganti nama kolom yang tidak sesuai)
+# Mengganti nama kolom ke dalam bahasa Indonesia
+dataset.rename(columns={
+    'RegionCode': 'KodeWilayah',
+    'RegionName': 'NamaWilayah',
+    'CountryCode': 'KodeNegara',
+    'CountryName': 'NamaNegara',
+    'Year': 'Tahun',
+    'Sex': 'JenisKelamin',
+    'AgeGroup': 'KelompokUsia',
+    'Generation': 'Generasi',
+    'SuicideCount': 'JumlahKematiansuicide',
+    'CauseSpecificDeathPercentage': 'PersentaseKematianSpesifikPenyebab',
+    'DeathRatePer100K': 'TingkatKematianPer100K',
+    'Population': 'Populasi',
+    'GDP': 'PDB',
+    'GDPPerCapita': 'PDBPerKepala',
+    'GrossNationalIncome': 'PendapatanNasionalBruto',
+    'GNIPerCapita': 'PNBPerKepala',
+    'InflationRate': 'TingkatInflasi',
+    'EmploymentPopulationRatio': 'RasioPenyerapanTenagaKerja'
+}, inplace=True)
+
+# Menampilkan nama kolom setelah perubahan
+print(dataset.columns)
+
+print(dataset.head(10))
+
+# Memeriksa jumlah nilai null (missing values) di setiap kolom
+print(dataset.isnull().sum())
+
+# Menampilkan summary statistik untuk melihat distribusi data numerik
+print(dataset.describe())
+
+# Memisahkan kolom numerik dan kategorikal
+numerical_data = dataset.select_dtypes(include=['float64', 'int64'])
+categorical_data = dataset.select_dtypes(include=['object'])
+
+# Menampilkan kolom numerik
+print(numerical_data.columns)
+
+# Menghitung matriks korelasi hanya untuk kolom numerik
+correlation_matrix = numerical_data.corr()
+
+# Menampilkan matriks korelasi
+print(correlation_matrix)
+
+# Menampilkan heatmap korelasi
+plt.figure(figsize=(10, 8))
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f', linewidths=0.5)
+plt.title('Matriks Korelasi')
+plt.show()
