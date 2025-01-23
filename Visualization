@@ -1,0 +1,39 @@
+# Menghitung jumlah kematian bunuh diri per negara
+suicide_by_country = dataset.groupby('NamaNegara')['JumlahKematiansuicide'].sum().sort_values(ascending=False)
+
+# Plot bar chart
+plt.figure(figsize=(12, 8))
+suicide_by_country.head(10).plot(kind='bar', color='skyblue')
+plt.title('Jumlah Kematiansuicide Berdasarkan Negara (Top 10)')
+plt.xlabel('Negara')
+plt.ylabel('Jumlah Kematiansuicide')
+plt.xticks(rotation=45)
+plt.show()
+
+# Menghitung jumlah kematian bunuh diri berdasarkan jenis kelamin
+suicide_by_gender = dataset.groupby('JenisKelamin')['JumlahKematiansuicide'].sum()
+
+# Plot pie chart
+plt.figure(figsize=(7, 7))
+suicide_by_gender.plot(kind='pie', autopct='%1.1f%%', colors=['lightcoral', 'lightgreen'], startangle=90, legend=False)
+plt.title('Kematian Bunuh Diri Berdasarkan Jenis Kelamin')
+plt.ylabel('')
+plt.show()
+
+
+# Plot histogram untuk tingkat kematian per 100K
+plt.figure(figsize=(10, 6))
+plt.hist(dataset['TingkatKematianPer100K'], bins=20, color='lightblue', edgecolor='black')
+plt.title('Distribusi Tingkat Kematian per 100K')
+plt.xlabel('Tingkat Kematian per 100K')
+plt.ylabel('Frekuensi')
+plt.grid(True)
+plt.show()
+
+# Box plot untuk hubungan antara GDP dan Jumlah Kematiansuicide
+plt.figure(figsize=(12, 8))
+sns.boxplot(x=dataset['PDB'], y=dataset['JumlahKematiansuicide'], color='lightgreen')
+plt.title('Box Plot: PDB vs. Jumlah Kematiansuicide')
+plt.xlabel('PDB')
+plt.ylabel('Jumlah Kematiansuicide')
+plt.show()
