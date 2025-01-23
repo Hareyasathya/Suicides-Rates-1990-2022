@@ -1,0 +1,36 @@
+from pyspark.ml.classification import GBTClassifier
+from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+
+# Model Gradient Boosted Trees (GBT)
+gbt = GBTClassifier(featuresCol="features", labelCol="label", seed=42)
+
+
+# Grid Hyperparameter untuk GBT
+paramGrid_gbt = ParamGridBuilder() \
+    .addGrid(gbt.maxDepth, [3, 5]) \
+    .addGrid(gbt.maxIter, [10, 20]) \
+    .addGrid(gbt.stepSize, [0.05, 0.1]) \
+    .build()
+
+# Mendefinisikan Evaluator
+evaluator_gbt = BinaryClassificationEvaluator(labelCol="label", metricName="areaUnderROC")
+
+# Cross-validation untuk Hyperparameter Tuning
+cv_gbt = CrossValidator(
+    estimator=gbt,
+    estimatorParamMaps=paramGrid_gbt,
+    evaluator=evaluator_gbt,
+    numFolds=3,
+    parallelism=2
+)
+
+# Model Uji dengan Hyperparameter Tuning
+cv_model_gbt = cv_gbt.fit(train_data)
+
+# Evaluasi Model Terbaik
+best_gbt_model = cv_model_gbt.bestModel
+auc_gbt = evaluator_gbt.evaluate(best_gbt_model.transform(test_data))
+
+print(f"Best Gradient Boosted Trees AUC: {auc_gbt}")
