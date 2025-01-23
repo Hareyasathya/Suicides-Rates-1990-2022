@@ -1,0 +1,64 @@
+from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler, StringIndexer
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
+
+# Membuat SparkSession
+spark = SparkSession.builder.appName("SuicideAnalysis").getOrCreate()
+
+# Membuat kolom label biner berdasarkan "TingkatKematianPer100K"
+def create_binary_label(TingkatKematianPer100K):
+    if TingkatKematianPer100K <= 10:
+        return 0  # tingkat bunuh diri rendah
+    else:
+        return 1  # tingkat bunuh diri sedang hingga tinggi
+
+create_binary_label_udf = F.udf(create_binary_label, returnType=IntegerType())
+spark_df = spark_df.withColumn("label", create_binary_label_udf(spark_df["TingkatKematianPer100K"]))
+
+# Mendefinisikan kolom fitur
+feature_columns = ['Populasi', 'PDBPerKepala', 'TingkatKematianPer100K', 'RasioPenyerapanTenagaKerja']
+
+# Menggunakan Imputer untuk menangani nilai NaN
+imputer = Imputer(inputCols=feature_columns, outputCols=feature_columns)
+imputer_model = imputer.fit(spark_df)
+spark_df = imputer_model.transform(spark_df)
+
+assembler = VectorAssembler(inputCols=feature_columns, outputCol="features")
+spark_df = assembler.transform(spark_df)
+
+# Membagi data menjadi data pelatihan dan pengujian
+train_data, test_data = spark_df.randomSplit([0.8, 0.2], seed=1234)
+
+# Mendefinisikan dan melatih model Logistic Regression
+lr = LogisticRegression(labelCol="label", featuresCol="features", maxIter=10)
+lr_model = lr.fit(train_data)
+
+# Membuat prediksi menggunakan model
+predictions = lr_model.transform(test_data)
+
+# Evaluasi akurasi
+evaluator_accuracy = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="accuracy")
+accuracy = evaluator_accuracy.evaluate(predictions)
+print(f"Logistic Regression Accuracy: {accuracy}")
+
+# Evaluasi metrik lainnya
+evaluator_auc = BinaryClassificationEvaluator(labelCol="label", rawPredictionCol="rawPrediction", metricName="areaUnderROC")
+auc = evaluator_auc.evaluate(predictions)
+
+evaluator_f1 = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="f1")
+f1_score = evaluator_f1.evaluate(predictions)
+
+evaluator_precision = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="weightedPrecision")
+precision = evaluator_precision.evaluate(predictions)
+
+evaluator_recall = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="weightedRecall")
+recall = evaluator_recall.evaluate(predictions)
+
+# Menampilkan hasil evaluasi
+print("Logistic Regression Metrics:")
+print(f"1. AUC (ROC Curve): {auc}")
+print(f"2. Accuracy: {accuracy}")
+print(f"3. F1 Score: {f1_score}")
+print(f"4. Precision: {precision}")
+print(f"5. Recall: {recall}")
