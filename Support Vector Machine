@@ -1,0 +1,145 @@
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.types import IntegerType
+from pyspark.ml.feature import VectorAssembler, StandardScaler, Imputer
+from pyspark.ml.classification import LinearSVC
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator, BinaryClassificationEvaluator
+
+# Membuat SparkSession
+spark = SparkSession.builder.appName("SuicideAnalysis_SVM").getOrCreate()
+
+# Load Dataset
+file_path = "suicide_rates_1990-2022.csv"
+spark_df = spark.read.csv(file_path, header=True, inferSchema=True)
+
+# Menghapus Baris dengan Nilai Null pada Kolom "TingkatKematianPer100K"
+spark_df = spark_df.filter(spark_df.DeathRatePer100K.isNotNull())
+
+# Membuat Kolom Label Binari Berdasarkan "TingkatKematianPer100K"
+def create_binary_label(DeathRatePer100K):
+    try:
+        if float(DeathRatePer100K) <= 10:
+            return 0  # tingkat bunuh diri rendah
+        else:
+            return 1  # tingkat bunuh diri tinggi
+    except (TypeError, ValueError):
+        return None
+
+# Daftar UDF
+create_binary_label_udf = F.udf(create_binary_label, returnType=IntegerType())
+
+# Menambah Label Kolom
+spark_df = spark_df.withColumn("label", create_binary_label_udf(spark_df["DeathRatePer100K"]))
+
+# Menghapus Baris dengan Nilai Null pada Kolom Label
+spark_df = spark_df.filter(spark_df.label.isNotNull())
+
+# Menentukan Kolom Fitur
+feature_columns = [
+    'Population',
+    'GDPPerCapita',
+    'DeathRatePer100K',
+    'EmploymentPopulationRatio'
+]
+
+# Menangani Nilai yang Hilang pada Kolom Fitur Menggunakan Imputer
+imputer = Imputer(
+    inputCols=feature_columns,
+    outputCols=feature_columns,
+    strategy="mean"
+)
+imputer_model = imputer.fit(spark_df)
+spark_df = imputer_model.transform(spark_df)
+
+# Periksa apakah kolom assembled_features ada, jika iya, hapus
+if "assembled_features" in spark_df.columns:
+    spark_df = spark_df.drop("assembled_features")
+
+
+# Membuat Vektor Fitur
+assembler = VectorAssembler(
+    inputCols=feature_columns,
+    outputCol="assembled_features",
+    handleInvalid="skip"  # Skip invalid records
+)
+spark_df = assembler.transform(spark_df)
+
+# Menghapus Baris dengan Nilai Null
+spark_df = spark_df.filter(spark_df.assembled_features.isNotNull())
+
+# Periksa apakah kolom features sudah ada, jika iya, hapus
+if "features" in spark_df.columns:
+    spark_df = spark_df.drop("features")
+
+# Menstandarkan Fitur dengan "StandardScaler"
+scaler = StandardScaler(
+    inputCol="assembled_features",
+    outputCol="features",
+    withStd=True,
+    withMean=True
+)
+scaler_model = scaler.fit(spark_df)
+spark_df = scaler_model.transform(spark_df)
+
+# Menampilkan Jumlah Rekaman Setelah Preprocessing
+print(f"Number of records after preprocessing: {spark_df.count()}")
+
+# Membagi data
+train_data, test_data = spark_df.randomSplit([0.8, 0.2], seed=42)
+
+# Mendefinisikan dan Melatih Model SVM (Support Vector Machine)
+svm = LinearSVC(
+    maxIter=100,
+    regParam=0.1,
+    labelCol="label",
+    featuresCol="features"
+)
+svm_model = svm.fit(train_data)
+
+# Membuat Prediksi
+predictions = svm_model.transform(test_data)
+
+# Evaluasi Model dengan Berbagai Metrik
+binary_evaluator = BinaryClassificationEvaluator(
+    labelCol="label",
+    rawPredictionCol="rawPrediction",
+    metricName="areaUnderROC"
+)
+auc_roc = binary_evaluator.evaluate(predictions)
+
+# Multi-class Metrik
+evaluator_accuracy = MulticlassClassificationEvaluator(
+    labelCol="label",
+    predictionCol="prediction",
+    metricName="accuracy"
+)
+evaluator_f1 = MulticlassClassificationEvaluator(
+    labelCol="label",
+    predictionCol="prediction",
+    metricName="f1"
+)
+evaluator_precision = MulticlassClassificationEvaluator(
+    labelCol="label",
+    predictionCol="prediction",
+    metricName="weightedPrecision"
+)
+evaluator_recall = MulticlassClassificationEvaluator(
+    labelCol="label",
+    predictionCol="prediction",
+    metricName="weightedRecall"
+)
+
+
+# Kalkulasi Metrik
+accuracy = evaluator_accuracy.evaluate(predictions)
+f1_score = evaluator_f1.evaluate(predictions)
+precision = evaluator_precision.evaluate(predictions)
+recall = evaluator_recall.evaluate(predictions)
+
+# Mencetak Hasil Evaluasi
+print("\nSVM Model Evaluation Metrics:")
+print(f"1. AUC (ROC Curve): {auc_roc:.4f}")
+print(f"2. Accuracy: {accuracy:.4f}")
+print(f"3. F1 Score: {f1_score:.4f}")
+print(f"4. Precision: {precision:.4f}")
+print(f"5. Recall: {recall:.4f}")
